@@ -8,25 +8,26 @@
     It's designed to be idempotent and includes testing of the proxy functionality.
 
 .PARAMETER ResourceGroupName
-    Name of the Azure resource group (default: "squidder-rg")
+    Name of the Azure resource group (default: "squidder-us-rg")
 
-.PARAMETER Location
-    Azure region for deployment (default: "australiaeast")
+.PARAMETER SquidPort
+    Port for Squid proxy server (default: 3128)
 
-.PARAMETER VMName
-    Name of the virtual machine (default: "squidder")
+.PARAMETER AllowedNetworks
+    Comma-separated list of allowed network CIDRs (default: "0.0.0.0/0")
+
+.NOTES
+    Location, VM name, and admin username are read from parameters.json file.
+    Admin password is read from AZURE_ADMIN_PASSWORD environment variable.
 
 .EXAMPLE
     ./AzureCreateProxy.ps1
-    ./AzureCreateProxy.ps1 -ResourceGroupName "my-proxy-rg" -Location "eastus"
+    ./AzureCreateProxy.ps1 -ResourceGroupName "my-proxy-rg" -SquidPort 8080
 #>
 
 [CmdletBinding()]
 param(
     [string]$ResourceGroupName = "squidder-us-rg",
-    [string]$Location = "eastus",
-    [string]$VMName = "squidderus",
-    [string]$AdminUsername = "azureuser",
     [int]$SquidPort = 3128,
     [string]$AllowedNetworks = "0.0.0.0/0"
 )
@@ -40,11 +41,33 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $TemplateFile = Join-Path $ScriptDir "template.json"
 $ParametersFile = Join-Path $ScriptDir "parameters.json"
 
+# Read parameters from parameters.json
+$ParametersContent = Get-Content $ParametersFile | ConvertFrom-Json
+$ExistingParams = @{}
+
+# Extract parameters that have values
+foreach ($param in $ParametersContent.parameters.PSObject.Properties) {
+    if ($param.Value.value -ne $null -and $param.Value.value -ne "") {
+        $ExistingParams[$param.Name] = $param.Value.value
+    }
+}
+
+# Set variables from parameters.json
+$Location = $ExistingParams.location
+$VMName = $ExistingParams.virtualMachines_squidder_name
+$AdminUsername = $ExistingParams.adminUsername
+
+# Validate required parameters
+if (-not $Location) { Write-Error "Location must be specified in parameters.json" }
+if (-not $VMName) { Write-Error "VM name must be specified in parameters.json" }
+if (-not $AdminUsername) { Write-Error "Admin username must be specified in parameters.json" }
+
 #region Password Management
 Write-Host "=== Azure Squid Proxy Deployment Script ===" -ForegroundColor Cyan
 Write-Host "Resource Group: $ResourceGroupName" -ForegroundColor Yellow
 Write-Host "Location: $Location" -ForegroundColor Yellow
 Write-Host "VM Name: $VMName" -ForegroundColor Yellow
+Write-Host "Admin Username: $AdminUsername" -ForegroundColor Yellow
 Write-Host "Squid Port: $SquidPort" -ForegroundColor Yellow
 Write-Host "Allowed Networks: $AllowedNetworks" -ForegroundColor Yellow
 
@@ -199,20 +222,7 @@ if (-not (Test-Path $ParametersFile)) {
     Write-Error "Parameters file not found: $ParametersFile"
 }
 
-# Password is now handled in the Password Management region above
-
-# Read existing parameters from parameters.json
-$ParametersContent = Get-Content $ParametersFile | ConvertFrom-Json
-$ExistingParams = @{}
-
-# Check which parameters have values in parameters.json
-foreach ($param in $ParametersContent.parameters.PSObject.Properties) {
-    if ($param.Value.value -ne $null -and $param.Value.value -ne "") {
-        $ExistingParams[$param.Name] = $param.Value.value
-    }
-}
-
-# Prepare deployment parameters - script parameters override parameters.json
+# Prepare deployment parameters using values from parameters.json
 $DeploymentParams = @{
     ResourceGroupName     = $ResourceGroupName
     TemplateFile         = $TemplateFile
@@ -220,21 +230,15 @@ $DeploymentParams = @{
     Mode                 = "Incremental"
 }
 
-# Add location parameter (script parameter takes precedence)
+# Add deployment-specific parameters
 $DeploymentParams.location = $Location
-
-# Add VM name parameter (script parameter takes precedence)
 $DeploymentParams.virtualMachines_squidder_name = $VMName
-
-# Add admin username parameter
 $DeploymentParams.adminUsername = $AdminUsername
-
-# Add admin password parameter
 $DeploymentParams.adminPassword = $AdminPassword
 
-Write-Host "Using parameters:" -ForegroundColor Yellow
-Write-Host "  Location: $Location $(if ($ExistingParams.location -and $ExistingParams.location -ne $Location) { "(overriding parameters.json: $($ExistingParams.location))" })" -ForegroundColor White
-Write-Host "  VM Name: $VMName $(if ($ExistingParams.virtualMachines_squidder_name -and $ExistingParams.virtualMachines_squidder_name -ne $VMName) { "(overriding parameters.json: $($ExistingParams.virtualMachines_squidder_name))" })" -ForegroundColor White
+Write-Host "Using deployment parameters:" -ForegroundColor Yellow
+Write-Host "  Location: $Location" -ForegroundColor White
+Write-Host "  VM Name: $VMName" -ForegroundColor White
 Write-Host "  Admin Username: $AdminUsername" -ForegroundColor White
 
 Write-Host "Validating ARM template..." -ForegroundColor Yellow
