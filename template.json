@@ -28,6 +28,19 @@
         "networkSecurityGroups_squidder_nsg_name": {
             "defaultValue": "squidder-nsg",
             "type": "String"
+        },
+        "adminUsername": {
+            "defaultValue": "azureuser",
+            "type": "String",
+            "metadata": {
+                "description": "Administrator username for the VM"
+            }
+        },
+        "adminPassword": {
+            "type": "SecureString",
+            "metadata": {
+                "description": "Administrator password for the VM"
+            }
         }
     },
     "variables": {},
@@ -57,6 +70,25 @@
                             "sourceAddressPrefixes": [],
                             "destinationAddressPrefixes": []
                         }
+                    },
+                    {
+                        "name": "SquidProxy",
+                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups/securityRules', parameters('networkSecurityGroups_squidder_nsg_name'), 'SquidProxy')]",
+                        "type": "Microsoft.Network/networkSecurityGroups/securityRules",
+                        "properties": {
+                            "protocol": "TCP",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "3128",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 310,
+                            "direction": "Inbound",
+                            "sourcePortRanges": [],
+                            "destinationPortRanges": [],
+                            "sourceAddressPrefixes": [],
+                            "destinationAddressPrefixes": []
+                        }
                     }
                 ]
             }
@@ -71,7 +103,6 @@
                 "tier": "Regional"
             },
             "properties": {
-                "ipAddress": "68.218.29.200",
                 "publicIPAddressVersion": "IPv4",
                 "publicIPAllocationMethod": "Static",
                 "idleTimeoutInMinutes": 4,
@@ -128,11 +159,11 @@
                     },
                     "osDisk": {
                         "osType": "Linux",
-                        "name": "[concat(parameters('virtualMachines_squidder_name'), '_OsDisk_1_5854a3cb01f545609b7c561c7e3595d4')]",
+                        "name": "[concat(parameters('virtualMachines_squidder_name'), '_OsDisk')]",
                         "createOption": "FromImage",
                         "caching": "ReadWrite",
                         "managedDisk": {
-                            "id": "[resourceId('Microsoft.Compute/disks', concat(parameters('virtualMachines_squidder_name'), '_OsDisk_1_5854a3cb01f545609b7c561c7e3595d4'))]"
+                            "storageAccountType": "Standard_LRS"
                         },
                         "deleteOption": "Delete"
                     },
@@ -141,7 +172,8 @@
                 },
                 "osProfile": {
                     "computerName": "[parameters('virtualMachines_squidder_name')]",
-                    "adminUsername": "dawidg",
+                    "adminUsername": "[parameters('adminUsername')]",
+                    "adminPassword": "[parameters('adminPassword')]",
                     "linuxConfiguration": {
                         "disablePasswordAuthentication": false,
                         "provisionVMAgent": true,
@@ -152,8 +184,7 @@
                         "enableVMAgentPlatformUpdates": false
                     },
                     "secrets": [],
-                    "allowExtensionOperations": true,
-                    "requireGuestProvisionSignal": true
+                    "allowExtensionOperations": true
                 },
                 "securityProfile": {
                     "uefiSettings": {
@@ -202,6 +233,28 @@
             }
         },
         {
+            "type": "Microsoft.Network/networkSecurityGroups/securityRules",
+            "apiVersion": "2024-07-01",
+            "name": "[concat(parameters('networkSecurityGroups_squidder_nsg_name'), '/SquidProxy')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroups_squidder_nsg_name'))]"
+            ],
+            "properties": {
+                "protocol": "TCP",
+                "sourcePortRange": "*",
+                "destinationPortRange": "3128",
+                "sourceAddressPrefix": "*",
+                "destinationAddressPrefix": "*",
+                "access": "Allow",
+                "priority": 310,
+                "direction": "Inbound",
+                "sourcePortRanges": [],
+                "destinationPortRanges": [],
+                "sourceAddressPrefixes": [],
+                "destinationAddressPrefixes": []
+            }
+        },
+        {
             "type": "Microsoft.Network/virtualNetworks/subnets",
             "apiVersion": "2024-07-01",
             "name": "[concat(parameters('virtualNetworks_squidder_vnet_name'), '/default')]",
@@ -233,7 +286,6 @@
                         "id": "[concat(resourceId('Microsoft.Network/networkInterfaces', parameters('networkInterfaces_squidder949_name')), '/ipConfigurations/ipconfig1')]",
                         "type": "Microsoft.Network/networkInterfaces/ipConfigurations",
                         "properties": {
-                            "privateIPAddress": "10.1.0.4",
                             "privateIPAllocationMethod": "Dynamic",
                             "publicIPAddress": {
                                 "id": "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIPAddresses_squidder_ip_name'))]",
